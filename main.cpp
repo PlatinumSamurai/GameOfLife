@@ -1,7 +1,7 @@
 #include <iostream>
 #include <SFML/Graphics.hpp>
-#include <vector>
-#include <utility>
+
+#include "field.hpp"
 
 
 const int WIDTH = 1920;
@@ -10,18 +10,16 @@ const int SQUARES_HORIZONTAL = 128;
 const int SQUARES_VERTICAL = 69;
 const int SQUARE_SIZE = 14;
 const int BUTTON_OFFSET = 600;
-
-
-void mooreNeighbourhood(std::vector<std::vector<sf::RectangleShape>> &squares);
+const sf::Color DEAD_CELL = sf::Color::White;
+const sf::Color ALIVE_CELL = sf::Color::Black;
 
 
 int main() {
-    sf::RenderWindow window(sf::VideoMode(WIDTH, HEIGHT), "Game Of Life", sf::Style::Fullscreen);
+    sf::RenderWindow window(sf::VideoMode(WIDTH, HEIGHT), "Game Of Life");
     window.setFramerateLimit(60);
 
-    std::vector<std::vector<sf::RectangleShape>> squares(SQUARES_HORIZONTAL,
-            std::vector<sf::RectangleShape>(SQUARES_VERTICAL,
-                    sf::RectangleShape(sf::Vector2f(SQUARE_SIZE, SQUARE_SIZE))));
+    Field field(SQUARES_HORIZONTAL, SQUARES_VERTICAL, SQUARE_SIZE, DEAD_CELL);
+
     bool isPlay = false;
     sf::Clock timer;
     sf::Texture play;
@@ -34,6 +32,7 @@ int main() {
     sf::Sprite fasterSprite;
     sf::Sprite slowerSprite;
     float deltaTime = 0.15;
+    sf::Color activeColor = ALIVE_CELL;
 
     play.loadFromFile("src\\play.png");
     pause.loadFromFile("src\\pause.png");
@@ -58,17 +57,16 @@ int main() {
     slowerSprite.setPosition(fasterSprite.getPosition().x - fasterSprite.getGlobalBounds().width - 20,
                               HEIGHT - SQUARE_SIZE * 3);
 
-
-    for(int i = 0; i < squares.size(); ++i) {
-        for(int j = 0; j < squares.at(i).size(); ++j) {
-            squares.at(i).at(j).setPosition((SQUARE_SIZE + 1) * i, (SQUARE_SIZE + 1) * j);
-        }
-    }
-
+    
     while(window.isOpen()) {
         sf::Event event{};
         while(window.pollEvent(event)) {
             switch(event.type) {
+                case sf::Event::Closed:
+                    window.close();
+
+                    break;
+
                 case sf::Event::KeyPressed:
                     switch(event.key.code) {
                         case sf::Keyboard::E:
@@ -98,15 +96,7 @@ int main() {
                 case sf::Event::MouseButtonPressed:
                     switch(event.mouseButton.button) {
                         case sf::Mouse::Left:
-                            for(auto &item : squares) {
-                                for(auto &elem : item) {
-                                    if(elem.getGlobalBounds().contains(sf::Mouse::getPosition(window).x,
-                                            sf::Mouse::getPosition(window).y)) {
-                                        elem.setFillColor(sf::Color::Black);
-                                        break;
-                                    }
-                                }
-                            }
+                            field.updateColors(ALIVE_CELL, window);
 
                             if(playPauseSprite.getGlobalBounds().contains(sf::Mouse::getPosition(window).x,
                                     sf::Mouse::getPosition(window).y)) {
@@ -120,13 +110,7 @@ int main() {
                             }
                             if(restartSprite.getGlobalBounds().contains(sf::Mouse::getPosition(window).x,
                                                                           sf::Mouse::getPosition(window).y)) {
-                                for(auto &item : squares) {
-                                    for(auto &elem : item) {
-                                        if(elem.getFillColor() == sf::Color::Black) {
-                                            elem.setFillColor(sf::Color::White);
-                                        }
-                                    }
-                                }
+                                field.resetField(DEAD_CELL);
                             }
 
                             if(fasterSprite.getGlobalBounds().contains(sf::Mouse::getPosition(window).x,
@@ -162,15 +146,7 @@ int main() {
                             break;
 
                         case sf::Mouse::Right:
-                            for(auto &item : squares) {
-                                for(auto &elem : item) {
-                                    if(elem.getGlobalBounds().contains(sf::Mouse::getPosition(window).x,
-                                            sf::Mouse::getPosition(window).y)) {
-                                        elem.setFillColor(sf::Color::White);
-                                        break;
-                                    }
-                                }
-                            }
+                            field.updateColors(DEAD_CELL, window);
 
                             break;
 
@@ -187,25 +163,14 @@ int main() {
 
         if(isPlay and timer.getElapsedTime() >= sf::seconds(deltaTime)) {
             timer.restart();
-            mooreNeighbourhood(squares);
+            field.updateCells(DEAD_CELL, ALIVE_CELL);
         }
 
-        for(auto &item : squares) {
-            for(auto &elem : item) {
-                if(elem.getFillColor() != sf::Color::Black) {
-                    if (elem.getGlobalBounds().contains(sf::Mouse::getPosition(window).x,
-                            sf::Mouse::getPosition(window).y)) {
-                        elem.setFillColor(sf::Color(200, 200, 200));
-                    } else {
-                        elem.setFillColor(sf::Color::White);
-                    }
-                }
-            }
-        }
+        field.highlightMousePosition(DEAD_CELL, ALIVE_CELL, window);
 
         window.clear(sf::Color(150, 150, 255));
 
-        for(const auto &item : squares) {
+        for(const auto &item : field.getField()) {
             for(const auto &elem : item) {
                 window.draw(elem);
             }
@@ -220,62 +185,4 @@ int main() {
     }
 
     return 0;
-}
-
-
-void mooreNeighbourhood(std::vector<std::vector<sf::RectangleShape>> &squares) {
-    std::vector<std::pair<int, int>> shouldBeBlack;
-    std::vector<std::pair<int, int>> shouldBeWhite;
-    bool overflowX = false;
-    bool overflowY = false;
-
-    for(int i = 0; i < squares.size(); ++i) {
-        for(int j = 0; j < squares.at(i).size(); ++j) {
-            int counter = 0;
-            sf::Color color = squares.at(i).at(j).getFillColor();
-            for(int u = -1; u < 2; ++u) {
-                for(int k = -1; k < 2; ++k) {
-                    if(i + u > SQUARES_HORIZONTAL - 1 or i + u < 0) {
-                        overflowX = true;
-                        i = (i + u > SQUARES_HORIZONTAL - 1) ? -1 : SQUARES_HORIZONTAL;
-                    }
-                    if(j + k > SQUARES_VERTICAL - 1 or j + k < 0) {
-                        overflowY = true;
-                        j = (j + k > SQUARES_VERTICAL - 1) ? -1 : SQUARES_VERTICAL;
-                    }
-                    if(squares.at(i + u).at(j + k).getFillColor() == sf::Color::Black) {
-                        counter++;
-                    }
-
-                    if(overflowX) {
-                        overflowX = false;
-                        i = (i == -1) ? SQUARES_HORIZONTAL - 1 : 0;
-                    }
-                    if(overflowY) {
-                        overflowY = false;
-                        j = (j == -1) ? SQUARES_VERTICAL - 1 : 0;
-                    }
-                }
-            }
-            if(color == sf::Color::Black) {
-                counter--;
-            }
-
-            if(color != sf::Color::Black and counter == 3) {
-                shouldBeBlack.emplace_back(std::make_pair(i, j));
-            } else if(color == sf::Color::Black and (counter < 2 or counter > 3)) {
-                shouldBeWhite.emplace_back(std::make_pair(i, j));
-            }
-        }
-    }
-
-    for(const std::pair<int, int> &item : shouldBeBlack) {
-        squares.at(item.first).at(item.second).setFillColor(sf::Color::Black);
-    }
-    for(const std::pair<int, int> &item : shouldBeWhite) {
-        squares.at(item.first).at(item.second).setFillColor(sf::Color::White);
-    }
-
-    shouldBeBlack.clear();
-    shouldBeWhite.clear();
 }
