@@ -68,7 +68,6 @@ void Field::updateCells(const sf::Color &dead, const sf::Color &alive) {
         for (int j = 0; j < squares.at(i).size(); ++j) {
                 sf::Color cellColor = squares.at(i).at(j).getFillColor();
                 int counter = mooreNeighbourhood(std::make_pair(i, j), alive);
-//                int counter = 3;
                 if(cellColor == alive) {
                     counter--;
                 }
